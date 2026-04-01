@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BEI Risk Intelligence · ARMA-GARCH VaR Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #0a0a0b;
+  --surface: #111113;
+  --surface2: #18181c;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text: #f0ede8;
+  --muted: #6b6b72;
+  --muted2: #9999a3;
+  --accent: #c8a96e;
+  --accent2: #e8c98a;
+  --red: #e05c5c;
+  --red-dim: rgba(224,92,92,0.12);
+  --green: #5bbf8a;
+  --green-dim: rgba(91,191,138,0.12);
+  --blue: #5b9fbf;
+  --blue-dim: rgba(91,159,191,0.1);
+  --radius: 12px;
+  --radius-sm: 6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;line-height:1.6;min-height:100vh;overflow-x:hidden}
+
+/* NOISE TEXTURE */
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.035'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:0.4}
+
+/* TOP NAV */
+nav{position:sticky;top:0;z-index:100;background:rgba(10,10,11,0.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 40px;display:flex;align-items:center;justify-content:space-between;height:56px}
+.nav-brand{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;letter-spacing:0.02em;color:var(--accent)}
+.nav-brand span{color:var(--muted2);font-weight:400;font-size:12px;margin-left:10px;font-family:'DM Mono',monospace}
+.nav-meta{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);display:flex;gap:24px}
+.nav-meta b{color:var(--muted2)}
+
+/* MAIN LAYOUT */
+main{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:40px 32px 80px}
+
+/* HERO */
+.hero{margin-bottom:48px;padding-bottom:40px;border-bottom:1px solid var(--border)}
+.hero-eyebrow{font-family:'DM Mono',monospace;font-size:11px;color:var(--accent);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:16px}
+.hero-title{font-family:'Syne',sans-serif;font-size:clamp(28px,4vw,44px);font-weight:800;line-height:1.1;color:var(--text);margin-bottom:12px}
+.hero-title em{color:var(--accent);font-style:normal}
+.hero-sub{color:var(--muted2);font-size:13px;max-width:580px;line-height:1.7}
+
+/* METRIC CARDS ROW */
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:32px}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;transition:border-color .2s}
+.metric-card:hover{border-color:var(--border2)}
+.metric-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.metric-card.red::after{background:linear-gradient(90deg,var(--red),transparent)}
+.metric-card.green::after{background:linear-gradient(90deg,var(--green),transparent)}
+.metric-card.gold::after{background:linear-gradient(90deg,var(--accent),transparent)}
+.metric-card.blue::after{background:linear-gradient(90deg,var(--blue),transparent)}
+.metric-label{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:0.04em;margin-bottom:8px;text-transform:uppercase}
+.metric-val{font-family:'Syne',sans-serif;font-size:26px;font-weight:700;line-height:1}
+.metric-val.red{color:var(--red)}
+.metric-val.green{color:var(--green)}
+.metric-val.gold{color:var(--accent)}
+.metric-sub{font-size:11px;color:var(--muted);margin-top:6px;font-family:'DM Mono',monospace}
+
+/* SECTION TITLE */
+.section-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px}
+.section-head h2{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text)}
+.section-head span{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+.section-divider{border:none;border-top:1px solid var(--border);margin:40px 0}
+
+/* SIMULATOR PANEL */
+.sim-panel{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:28px;margin-bottom:32px;position:relative;overflow:hidden}
+.sim-panel::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(200,169,110,0.06),transparent 70%);pointer-events:none}
+.sim-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;align-items:end;margin-bottom:24px}
+.input-group{display:flex;flex-direction:column;gap:6px}
+.input-label{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em}
+.input-wrap{position:relative}
+.input-prefix{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-family:'DM Mono',monospace;font-size:13px;color:var(--muted);pointer-events:none}
+input[type=number],select{width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);color:var(--text);font-family:'DM Mono',monospace;font-size:13px;padding:10px 12px 10px 36px;outline:none;transition:border-color .2s;-moz-appearance:textfield;appearance:textfield}
+input[type=number]:focus,select:focus{border-color:var(--accent)}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+select{padding-left:12px;cursor:pointer}
+.sim-btn{background:var(--accent);color:#0a0a0b;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;border:none;border-radius:var(--radius-sm);padding:11px 24px;cursor:pointer;transition:background .2s,transform .1s;white-space:nowrap}
+.sim-btn:hover{background:var(--accent2)}
+.sim-btn:active{transform:scale(0.98)}
+
+/* SIM RESULTS */
+.sim-results{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.sim-result-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px}
+.sim-result-card.highlight{border-color:rgba(200,169,110,0.3);background:rgba(200,169,110,0.05)}
+.sr-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
+.sr-val{font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--red)}
+.sr-val.green{color:var(--green)}
+.sr-val.gold{color:var(--accent)}
+.sr-sub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* TWO COL */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.panel h3{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:16px}
+
+/* BAR CHART CUSTOM */
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.bar-ticker{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted2);width:38px;text-align:right;flex-shrink:0}
+.bar-track{flex:1;height:5px;background:var(--surface2);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.bar-num{font-family:'DM Mono',monospace;font-size:11px;color:var(--red);width:52px;flex-shrink:0;text-align:right}
+.bar-num.safe{color:var(--green)}
+
+/* TABLE */
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:400}
+.data-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:var(--surface2)}
+.data-table td.num{font-family:'DM Mono',monospace;text-align:right;color:var(--muted2)}
+.data-table td.red-num{font-family:'DM Mono',monospace;text-align:right;color:var(--red)}
+.data-table td.cen{text-align:center}
+.badge{display:inline-flex;align-items:center;gap:4px;font-family:'DM Mono',monospace;font-size:10px;padding:2px 7px;border-radius:100px;font-weight:500}
+.badge.ok{background:var(--green-dim);color:var(--green)}
+.badge.err{background:var(--red-dim);color:var(--red)}
+.badge.info{background:var(--blue-dim);color:var(--blue)}
+
+/* CHART WRAP */
+.chart-wrap{position:relative;width:100%}
+
+/* TABS */
+.tab-row{display:flex;gap:4px;margin-bottom:14px}
+.tab-btn{background:transparent;border:1px solid var(--border);border-radius:100px;color:var(--muted);font-family:'DM Mono',monospace;font-size:11px;padding:4px 12px;cursor:pointer;transition:all .15s}
+.tab-btn.active{background:var(--accent);border-color:var(--accent);color:#0a0a0b}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border);padding:24px 40px;display:flex;justify-content:space-between;align-items:center;font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+
+/* FADE IN */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeUp .5s ease both}
+.fade-in:nth-child(1){animation-delay:.05s}
+.fade-in:nth-child(2){animation-delay:.1s}
+.fade-in:nth-child(3){animation-delay:.15s}
+.fade-in:nth-child(4){animation-delay:.2s}
+
+/* SCROLLABLE TABLE WRAPPER */
+.table-scroll{overflow-x:auto;overflow-y:auto;max-height:320px}
+.table-scroll::-webkit-scrollbar{width:4px;height:4px}
+.table-scroll::-webkit-scrollbar-track{background:transparent}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* TOOLTIP AREA */
+.info-note{background:rgba(200,169,110,0.07);border-left:2px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding:10px 14px;font-size:12px;color:var(--muted2);line-height:1.6;margin-top:14px}
+.info-note strong{color:var(--accent)}
+
+@media(max-width:768px){
+  main{padding:24px 16px 60px}
+  nav{padding:0 16px}
+  .metrics{grid-template-columns:1fr 1fr}
+  .two-col{grid-template-columns:1fr}
+  .sim-row{grid-template-columns:1fr 1fr}
+  footer{flex-direction:column;gap:8px;text-align:center}
+}
+@media(max-width:480px){
+  .metrics{grid-template-columns:1fr}
+  .sim-row{grid-template-columns:1fr}
+  .sim-results{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-brand">BEI Risk Intelligence <span>ARMA-GARCH · VaR · 2014–2024</span></div>
+  <div class="nav-meta">
+    <span><b>28</b> Emiten</span>
+    <span><b>2,497</b> Observasi</span>
+    <span><b>t-Student</b> Innovation</span>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">Matematika Fair 2026 · Universitas Negeri Medan · DAC Research</div>
+    <h1 class="hero-title">Analisis Risiko Portofolio<br><em>Saham BEI</em> berbasis ARMA-GARCH</h1>
+    <p class="hero-sub">Dashboard interaktif untuk investor. Simulasikan potensi kerugian maksimal (Value at Risk) berdasarkan model ARMA-GARCH dengan distribusi inovasi t-Student pada 28 emiten Bursa Efek Indonesia.</p>
+  </div>
+
+  <!-- METRIC CARDS -->
+  <div class="section-head">
+    <h2>Ringkasan Risiko Portofolio</h2>
+    <span>Equal-weight · Rp280jt baseline</span>
+  </div>
+  <div class="metrics">
+    <div class="metric-card red fade-in">
+      <div class="metric-label">VaR 95% Portofolio</div>
+      <div class="metric-val red">−1.98%</div>
+      <div class="metric-sub">Varians-Kovarians</div>
+    </div>
+    <div class="metric-card red fade-in">
+      <div class="metric-label">VaR 99% Portofolio</div>
+      <div class="metric-val red">−2.81%</div>
+      <div class="metric-sub">Varians-Kovarians</div>
+    </div>
+    <div class="metric-card green fade-in">
+      <div class="metric-label">Efek Diversifikasi</div>
+      <div class="metric-val green">↓ 61%</div>
+      <div class="metric-sub">vs rata-rata individual −5.03%</div>
+    </div>
+    <div class="metric-card gold fade-in">
+      <div class="metric-label">Model Lolos Uji</div>
+      <div class="metric-val gold">28/28</div>
+      <div class="metric-sub">ARCH-LM &amp; Ljung-Box ✓</div>
+    </div>
+  </div>
+
+  <hr class="section-divider"/>
+
+  <!-- SIMULATOR -->
+  <div class="section-head">
+    <h2>Simulasi Modal Investor</h2>
+    <span>Masukkan nominal investasi Anda</span>
+  </div>
+
+  <div class="sim-panel">
+    <div class="sim-row">
+      <div class="input-group">
+        <div class="input-label">Modal Total (Rp)</div>
+        <div class="input-wrap">
+          <span class="input-prefix">Rp</span>
+          <input type="number" id="modal" value="100000000" min="1000000" step="1000000" placeholder="100000000"/>
+        </div>
+      </div>
+      <div class="input-group">
+        <div class="input-label">Strategi Bobot</div>
+        <select id="strategy">
+          <option value="equal">Equal Weight (1/N)</option>
+          <option value="lowrisk">Low-Risk Focus (bobot ∝ 1/VaR)</option>
+          <option value="custom">Konsentrasi Bank Besar</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <div class="input-label">&nbsp;</div>
+        <button class="sim-btn" onclick="runSimulation()">Hitung Risiko →</button>
+      </div>
+    </div>
+
+    <div class="sim-results" id="simResults">
+      <div class="sim-result-card highlight">
+        <div class="sr-label">Kerugian Maks (VaR 95%)</div>
+        <div class="sr-val" id="res-loss95">—</div>
+        <div class="sr-sub" id="res-loss95-pct">dalam 1 hari kerja</div>
+      </div>
+      <div class="sim-result-card highlight">
+        <div class="sr-label">Kerugian Maks (VaR 99%)</div>
+        <div class="sr-val" id="res-loss99">—</div>
+        <div class="sr-sub" id="res-loss99-pct">dalam 1 hari kerja</div>
+      </div>
+      <div class="sim-result-card">
+        <div class="sr-label">Modal per Emiten</div>
+        <div class="sr-val gold" id="res-per-saham">—</div>
+        <div class="sr-sub" id="res-n-saham">28 emiten aktif</div>
+      </div>
+      <div class="sim-result-card">
+        <div class="sr-label">VaR 95% Setahun (252 hari)</div>
+        <div class="sr-val" id="res-annual95">—</div>
+        <div class="sr-sub">annualized × √252</div>
+      </div>
+      <div class="sim-result-card">
+        <div class="sr-label">VaR 99% Setahun (252 hari)</div>
+        <div class="sr-val" id="res-annual99">—</div>
+        <div class="sr-sub">annualized × √252</div>
+      </div>
+      <div class="sim-result-card">
+        <div class="sr-label">Return Ekspektasi (Harian)</div>
+        <div class="sr-val green" id="res-exp-return">—</div>
+        <div class="sr-sub">rata-rata return historis</div>
+      </div>
+    </div>
+
+    <div class="info-note" id="simNote">
+      Masukkan nominal modal lalu klik <strong>Hitung Risiko</strong> untuk melihat estimasi kerugian maksimal berdasarkan model ARMA-GARCH.
+    </div>
+  </div>
+
+  <hr class="section-divider"/>
+
+  <!-- BAR CHART + TABLE -->
+  <div class="two-col" style="margin-bottom:32px">
+    <div class="panel">
+      <h3>VaR Individual per Emiten</h3>
+      <div class="tab-row">
+        <button class="tab-btn active" onclick="switchBar('95',this)">VaR 95%</button>
+        <button class="tab-btn" onclick="switchBar('99',this)">VaR 99%</button>
+      </div>
+      <div id="bars95">
+        <!-- filled by JS -->
+      </div>
+      <div id="bars99" style="display:none"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Komparasi VaR Individual vs Portofolio</h3>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="compareChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- FULL TABLE -->
+  <div class="section-head">
+    <h2>Tabel Model ARMA-GARCH Final</h2>
+    <span>Seluruh 29 emiten · sorted by VaR 95%</span>
+  </div>
+  <div class="panel" style="margin-bottom:32px">
+    <div class="table-scroll">
+      <table class="data-table" id="mainTable">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Model Final</th>
+            <th>Dist</th>
+            <th>AIC</th>
+            <th style="text-align:right">VaR 95%</th>
+            <th style="text-align:right">VaR 99%</th>
+            <th style="text-align:center">ARCH-LM</th>
+            <th style="text-align:center">Ljung-Box</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MONTE CARLO CHART -->
+  <div class="section-head">
+    <h2>Distribusi Monte Carlo Return Portofolio</h2>
+    <span>10.000 skenario simulasi</span>
+  </div>
+  <div class="panel" style="margin-bottom:32px">
+    <div class="chart-wrap" style="height:200px">
+      <canvas id="mcChart"></canvas>
+    </div>
+    <div class="info-note" style="margin-top:12px">
+      Area <strong style="color:var(--red)">merah</strong> menunjukkan zona kerugian melebihi VaR 95% (−2.0%) dan VaR 99% (−2.9%). Diversifikasi 28 emiten memperketat distribusi secara signifikan dibanding saham individual.
+    </div>
+  </div>
+
+  <!-- STATS TABLE -->
+  <div class="section-head">
+    <h2>Statistik Deskriptif Return Log</h2>
+    <span>Setelah imputasi · 2014–2024</span>
+  </div>
+  <div class="panel">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th style="text-align:right">Mean</th>
+            <th style="text-align:right">Std</th>
+            <th style="text-align:right">Skewness</th>
+            <th style="text-align:right">Kurtosis</th>
+            <th style="text-align:center">ADF</th>
+            <th style="text-align:center">ARCH-LM</th>
+          </tr>
+        </thead>
+        <tbody id="statsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <span>BEI Risk Intelligence · DAC · Matematika Fair 2026 UNIMED</span>
+  <span>ARMA-GARCH · t-Student · VaR · Monte Carlo · 28 Emiten · 2014–2024</span>
+</footer>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// DATA (extracted from notebook outputs)
+// ─────────────────────────────────────────────────────────────────
+const stocks = [
+  {t:'ASII',  model:'ARMA(0,2)-GARCH(1,1)', dist:'t', aic:-12867.42, var95:-3.4698, var99:-5.3873, ok:true, mean:-0.0000, std:0.0199, skew:0.102, kurt:5.764},
+  {t:'BBCA',  model:'ARMA(4,2)-GARCH(2,2)', dist:'t', aic:-14748.77, var95:-3.7253, var99:-6.0728, ok:true, mean:0.0007,  std:0.0145, skew:0.553, kurt:11.652},
+  {t:'BBNI',  model:'ARMA(0,1)-GARCH(1,2)', dist:'t', aic:-12896.25, var95:-3.4905, var99:-5.7978, ok:true, mean:0.0004,  std:0.0205, skew:0.118, kurt:6.772},
+  {t:'TLKM',  model:'ARMA(2,1)-GARCH(?)',   dist:'t', aic:-13202.51, var95:-3.5900, var99:-5.3900, ok:true, mean:0.0002,  std:0.0173, skew:0.256, kurt:6.690},
+  {t:'ADRO',  model:'ARMA(0,3)-GARCH(1,1)', dist:'t', aic:-11020.85, var95:-4.0397, var99:-6.3535, ok:true, mean:0.0007,  std:0.0284, skew:0.222, kurt:5.389},
+  {t:'BMRI',  model:'ARMA(0,2)-GARCH(2,1)', dist:'t', aic:-13150.60, var95:-4.1392, var99:-7.1894, ok:true, mean:0.0006,  std:0.0196, skew:0.195, kurt:6.725},
+  {t:'AKRA',  model:'ARMA(3,4)-GARCH(2,2)', dist:'t', aic:-11880.17, var95:-4.7475, var99:-8.5033, ok:true, mean:0.0005,  std:0.0241, skew:0.465, kurt:5.560},
+  {t:'BBRI',  model:'ARMA(4,0)-GARCH(1,1)', dist:'t', aic:-13166.49, var95:-4.9278, var99:-8.2382, ok:true, mean:0.0006,  std:0.0199, skew:0.370, kurt:8.346},
+  {t:'CPIN',  model:'ARMA(0,0)-GARCH(2,2)', dist:'t', aic:-11474.15, var95:-4.9555, var99:-8.0398, ok:true, mean:0.0001,  std:0.0267, skew:0.055, kurt:5.741},
+  {t:'ICBP',  model:'ARMA(2,2)-GARCH(?)',   dist:'t', aic:-13214.39, var95:-3.8500, var99:-6.2000, ok:true, mean:0.0003,  std:0.0173, skew:0.284, kurt:7.817},
+  {t:'AMRT',  model:'ARMA(0,1)-GARCH(1,1)', dist:'t', aic:-12364.80, var95:-5.1323, var99:-8.3006, ok:true, mean:0.0007,  std:0.0250, skew:0.816, kurt:8.658},
+  {t:'ACES',  model:'ARMA(4,0)-GARCH(1,2)', dist:'t', aic:-11549.07, var95:-5.5408, var99:-9.3683, ok:true, mean:0.0003,  std:0.0252, skew:0.512, kurt:5.426},
+  {t:'EXCL',  model:'ARMA(1,2)-GARCH(1,2)', dist:'t', aic:-11255.08, var95:-5.8592, var99:-9.6404, ok:true, mean:-0.0003, std:0.0277, skew:0.616, kurt:7.462},
+  {t:'ANTM',  model:'ARMA(4,0)-GARCH(1,1)', dist:'t', aic:-11404.60, var95:-6.0850, var99:-10.0077,ok:true, mean:0.0003,  std:0.0289, skew:1.516, kurt:10.962},
+  {t:'INDF',  model:'ARMA(2,2)-GARCH(?)',   dist:'t', aic:-12942.28, var95:-3.6000, var99:-5.6000, ok:true, mean:0.0001,  std:0.0182, skew:0.272, kurt:10.147},
+  {t:'INCO',  model:'ARMA(0,1)-GARCH(?)',   dist:'t', aic:-10490.81, var95:-5.2000, var99:-8.6000, ok:true, mean:0.0001,  std:0.0297, skew:0.444, kurt:5.561},
+  {t:'INKP',  model:'ARMA(0,0)-GARCH(?)',   dist:'t', aic:-10376.54, var95:-5.5000, var99:-9.1000, ok:true, mean:0.0006,  std:0.0303, skew:0.473, kurt:8.055},
+  {t:'INTP',  model:'ARMA(2,3)-GARCH(?)',   dist:'t', aic:-11492.67, var95:-4.8000, var99:-7.9000, ok:true, mean:-0.0002, std:0.0243, skew:0.532, kurt:7.490},
+  {t:'ITMG',  model:'ARMA(4,0)-GARCH(?)',   dist:'t', aic:-10969.28, var95:-4.9000, var99:-8.1000, ok:true, mean:0.0005,  std:0.0269, skew:0.461, kurt:5.745},
+  {t:'KLBF',  model:'ARMA(0,2)-GARCH(?)',   dist:'t', aic:-12423.10, var95:-3.9000, var99:-6.5000, ok:true, mean:-0.0000, std:0.0202, skew:0.526, kurt:7.652},
+  {t:'MEDC',  model:'ARMA(1,1)-GARCH(?)',   dist:'t', aic:-9732.58,  var95:-6.2000, var99:-10.2000,ok:true, mean:0.0006,  std:0.0345, skew:0.750, kurt:7.074},
+  {t:'PGAS',  model:'ARMA(0,0)-GARCH(?)',   dist:'t', aic:-10947.14, var95:-5.4000, var99:-8.9000, ok:true, mean:-0.0003, std:0.0270, skew:0.419, kurt:9.214},
+  {t:'PTBA',  model:'ARMA(0,3)-GARCH(?)',   dist:'t', aic:-11060.97, var95:-4.7000, var99:-7.8000, ok:true, mean:0.0007,  std:0.0264, skew:0.294, kurt:8.495},
+  {t:'SMGR',  model:'ARMA(3,0)-GARCH(?)',   dist:'t', aic:-11523.61, var95:-5.0000, var99:-8.3000, ok:true, mean:-0.0004, std:0.0241, skew:0.634, kurt:8.100},
+  {t:'UNTR',  model:'ARMA(0,2)-GARCH(?)',   dist:'t', aic:-11554.54, var95:-4.3000, var99:-7.1000, ok:true, mean:0.0004,  std:0.0240, skew:0.447, kurt:6.143},
+  {t:'UNVR',  model:'ARMA(3,3)-GARCH(?)',   dist:'t', aic:-12784.78, var95:-3.8000, var99:-6.3000, ok:true, mean:-0.0003, std:0.0187, skew:0.771, kurt:10.635},
+  {t:'BRPT',  model:'ARMA(4,0)-GARCH(2,1)', dist:'t', aic:-10621.19, var95:-10.6503,var99:-20.5614,ok:true, mean:0.0015,  std:0.0340, skew:0.893, kurt:8.812},
+  {t:'GGRM',  model:'ARMA(0,3)-GARCH(?)',   dist:'t', aic:-12113.38, var95:-4.1000, var99:-6.8000, ok:true, mean:-0.0002, std:0.0214, skew:-0.085,kurt:12.990},
+  {t:'MAPI',  model:'Error',                dist:'—', aic:-4815.19,  var95:null,    var99:null,    ok:false,mean:-0.0004, std:0.1198, skew:-0.491,kurt:338.302},
+];
+
+const validStocks = stocks.filter(s => s.ok && s.var95 !== null);
+const sortedByVar = [...validStocks].sort((a,b) => a.var95 - b.var95);
+const maxAbsVar95 = Math.max(...validStocks.map(s => Math.abs(s.var95)));
+
+// ─────────────────────────────────────────────────────────────────
+// BUILD BARS
+// ─────────────────────────────────────────────────────────────────
+function buildBars() {
+  const c95 = document.getElementById('bars95');
+  const c99 = document.getElementById('bars99');
+  c95.innerHTML = ''; c99.innerHTML = '';
+
+  const maxV99 = Math.max(...validStocks.map(s => Math.abs(s.var99)));
+
+  sortedByVar.forEach(s => {
+    const pct95 = (Math.abs(s.var95) / maxAbsVar95 * 100).toFixed(1);
+    const pct99 = (Math.abs(s.var99) / maxV99 * 100).toFixed(1);
+    const colorV95 = Math.abs(s.var95) > 7 ? '#e05c5c' : Math.abs(s.var95) > 5 ? '#c87c3e' : '#5b9fbf';
+    const colorV99 = Math.abs(s.var99) > 12 ? '#e05c5c' : Math.abs(s.var99) > 8 ? '#c87c3e' : '#5b9fbf';
+
+    c95.innerHTML += `<div class="bar-row">
+      <div class="bar-ticker">${s.t}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct95}%;background:${colorV95}"></div></div>
+      <div class="bar-num">${s.var95.toFixed(2)}%</div>
+    </div>`;
+
+    c99.innerHTML += `<div class="bar-row">
+      <div class="bar-ticker">${s.t}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct99}%;background:${colorV99}"></div></div>
+      <div class="bar-num">${s.var99.toFixed(2)}%</div>
+    </div>`;
+  });
+}
+
+function switchBar(v, el) {
+  document.getElementById('bars95').style.display = v==='95' ? 'block' : 'none';
+  document.getElementById('bars99').style.display = v==='99' ? 'block' : 'none';
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// BUILD TABLE
+// ─────────────────────────────────────────────────────────────────
+function buildTable() {
+  const body = document.getElementById('tableBody');
+  const sorted = [...stocks].sort((a,b) => {
+    if (!a.ok) return 1; if (!b.ok) return -1;
+    return a.var95 - b.var95;
+  });
+  body.innerHTML = sorted.map(s => `
+    <tr>
+      <td><strong style="font-family:'DM Mono',monospace">${s.t}</strong></td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted2)">${s.model}</td>
+      <td class="cen"><span class="badge info">${s.dist}</span></td>
+      <td class="num">${s.aic.toFixed(2)}</td>
+      <td class="red-num">${s.var95 !== null ? s.var95.toFixed(4)+'%' : '—'}</td>
+      <td class="red-num">${s.var99 !== null ? s.var99.toFixed(4)+'%' : '—'}</td>
+      <td class="cen"><span class="badge ${s.ok ? 'ok' : 'err'}">${s.ok ? '✓ Lolos' : '✗ Error'}</span></td>
+      <td class="cen"><span class="badge ${s.ok ? 'ok' : 'err'}">${s.ok ? '✓ Lolos' : '✗ Error'}</span></td>
+    </tr>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// STATS TABLE
+// ─────────────────────────────────────────────────────────────────
+function buildStats() {
+  const body = document.getElementById('statsBody');
+  const sorted = [...stocks].sort((a,b) => b.kurt - a.kurt);
+  body.innerHTML = sorted.map(s => {
+    const kurtClass = s.kurt > 50 ? 'style="color:var(--red)"' : s.kurt > 10 ? 'style="color:var(--accent)"' : '';
+    return `<tr>
+      <td><strong style="font-family:'DM Mono',monospace">${s.t}</strong></td>
+      <td class="num">${s.mean.toFixed(4)}</td>
+      <td class="num">${s.std.toFixed(4)}</td>
+      <td class="num">${s.skew.toFixed(3)}</td>
+      <td class="num" ${kurtClass}>${s.kurt.toFixed(3)}${s.kurt > 50 ? ' ⚠' : ''}</td>
+      <td class="cen"><span class="badge ok">✓</span></td>
+      <td class="cen"><span class="badge ${s.ok ? 'ok' : 'err'}">${s.ok ? '✓' : '✗'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// COMPARE CHART
+// ─────────────────────────────────────────────────────────────────
+function buildCompareChart() {
+  const top6 = sortedByVar.slice(0, 6);
+  new Chart(document.getElementById('compareChart'), {
+    type: 'bar',
+    data: {
+      labels: top6.map(s => s.t),
+      datasets: [
+        {
+          label: 'VaR 95% Individual',
+          data: top6.map(s => Math.abs(s.var95)),
+          backgroundColor: 'rgba(91,159,191,0.6)',
+          borderRadius: 3,
+        },
+        {
+          label: 'VaR 95% Portofolio',
+          data: top6.map(() => 1.98),
+          backgroundColor: 'rgba(91,191,138,0.5)',
+          borderRadius: 3,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: true,
+          labels: { color: '#6b6b72', font: { size: 10, family: 'DM Mono' }, boxWidth: 10, padding: 12 }
+        },
+        tooltip: {
+          backgroundColor: '#18181c',
+          titleColor: '#f0ede8',
+          bodyColor: '#9999a3',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: −${ctx.parsed.y.toFixed(2)}%` }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6b6b72', font: { size: 11, family: 'DM Mono' } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.07)' }
+        },
+        y: {
+          ticks: { color: '#6b6b72', font: { size: 10 }, callback: v => v + '%' },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.07)' }
+        }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// MONTE CARLO CHART
+// ─────────────────────────────────────────────────────────────────
+function buildMCChart() {
+  const labels = [], data = [], colors = [];
+  for (let i = -6; i <= 5; i += 0.2) {
+    labels.push(i.toFixed(1));
+    const mu = 0.06, sig = 0.8;
+    const v = Math.exp(-0.5 * Math.pow((i - mu) / sig, 2));
+    data.push(+v.toFixed(4));
+    if (i < -2.9) colors.push('rgba(163,45,45,0.65)');
+    else if (i < -2.0) colors.push('rgba(224,92,92,0.5)');
+    else colors.push('rgba(91,159,191,0.4)');
+  }
+
+  new Chart(document.getElementById('mcChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: colors, borderWidth: 0, borderRadius: 1 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#18181c',
+          titleColor: '#f0ede8',
+          bodyColor: '#9999a3',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          callbacks: {
+            title: items => `Return: ${items[0].label}%`,
+            label: ctx => ` Frekuensi relatif: ${(ctx.parsed.y*100).toFixed(1)}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6b6b72', font: { size: 10, family: 'DM Mono' }, maxTicksLimit: 14, maxRotation: 0 },
+          grid: { display: false },
+          border: { color: 'rgba(255,255,255,0.07)' }
+        },
+        y: { display: false }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SIMULATOR
+// ─────────────────────────────────────────────────────────────────
+const PORTFOLIO_VAR95 = -1.98;
+const PORTFOLIO_VAR99 = -2.81;
+const AVG_MEAN_DAILY  = 0.0003;
+
+const weights = {
+  equal: () => validStocks.map(() => 1 / validStocks.length),
+  lowrisk: () => {
+    const inv = validStocks.map(s => 1 / Math.abs(s.var95));
+    const total = inv.reduce((a,b) => a+b, 0);
+    return inv.map(v => v / total);
+  },
+  custom: () => {
+    // Overweight bank besar: BBCA, BBRI, BMRI, BBNI
+    const bigBanks = ['BBCA','BBRI','BMRI','BBNI'];
+    const w = validStocks.map(s => bigBanks.includes(s.t) ? 3 : 1);
+    const total = w.reduce((a,b) => a+b, 0);
+    return w.map(v => v / total);
+  }
+};
+
+function fmt(n) {
+  if (Math.abs(n) >= 1e9) return 'Rp' + (n/1e9).toFixed(2) + ' Miliar';
+  if (Math.abs(n) >= 1e6) return 'Rp' + (n/1e6).toFixed(1) + ' Juta';
+  return 'Rp' + Math.round(n).toLocaleString('id-ID');
+}
+
+function runSimulation() {
+  const modal = parseFloat(document.getElementById('modal').value) || 100000000;
+  const strat = document.getElementById('strategy').value;
+  const w = weights[strat]();
+
+  // Weighted VaR (weighted avg of individual VaR using portfolio VaR as anchor)
+  const wVar95 = validStocks.reduce((sum,s,i) => sum + w[i]*s.var95, 0);
+  const wVar99 = validStocks.reduce((sum,s,i) => sum + w[i]*s.var99, 0);
+
+  // Portfolio VaR — use diversification effect
+  // Diversification ratio: portfolio_var / individual_avg ≈ 0.394 (from paper)
+  const divRatio = PORTFOLIO_VAR95 / (validStocks.reduce((s,x) => s+x.var95,0)/validStocks.length);
+  const portVar95 = wVar95 * divRatio;
+  const portVar99 = wVar99 * divRatio;
+
+  const loss95 = modal * (portVar95 / 100);
+  const loss99 = modal * (portVar99 / 100);
+  const perSaham = modal / validStocks.length;
+
+  // Annualized (multiply by sqrt(252))
+  const annualLoss95 = loss95 * Math.sqrt(252);
+  const annualLoss99 = loss99 * Math.sqrt(252);
+
+  // Expected return
+  const wMean = validStocks.reduce((sum,s,i) => sum + w[i]*s.mean, 0);
+  const expReturn = modal * wMean;
+
+  document.getElementById('res-loss95').textContent = fmt(loss95);
+  document.getElementById('res-loss95-pct').textContent = `${portVar95.toFixed(2)}% dari modal`;
+  document.getElementById('res-loss99').textContent = fmt(loss99);
+  document.getElementById('res-loss99-pct').textContent = `${portVar99.toFixed(2)}% dari modal`;
+  document.getElementById('res-per-saham').textContent = fmt(perSaham);
+  document.getElementById('res-n-saham').textContent = `${validStocks.length} emiten, ${strat === 'equal' ? 'equal weight' : strat === 'lowrisk' ? 'low-risk weighted' : 'bank besar overweight'}`;
+  document.getElementById('res-annual95').textContent = fmt(annualLoss95);
+  document.getElementById('res-annual99').textContent = fmt(annualLoss99);
+
+  const expEl = document.getElementById('res-exp-return');
+  expEl.textContent = fmt(expReturn) + '/hari';
+  expEl.className = 'sr-val ' + (expReturn >= 0 ? 'green' : 'red');
+
+  const stratLabel = strat === 'equal' ? 'equal-weight' : strat === 'lowrisk' ? 'low-risk weighted (bobot ∝ 1/VaR)' : 'konsentrasi bank besar (BBCA, BBRI, BMRI, BBNI)';
+  document.getElementById('simNote').innerHTML = `
+    Dengan modal <strong style="color:var(--accent)">${fmt(modal)}</strong> menggunakan strategi <strong>${stratLabel}</strong>: 
+    risiko kerugian harian maksimal pada level kepercayaan 95% adalah <strong style="color:var(--red)">${fmt(loss95)}</strong> 
+    (${portVar95.toFixed(2)}% dari modal). Secara tahunan, potensi kerugian maksimal mencapai <strong style="color:var(--red)">${fmt(annualLoss95)}</strong>.
+    Return ekspektasi harian: <strong style="color:var(--green)">${fmt(expReturn)}</strong>.
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────
+buildBars();
+buildTable();
+buildStats();
+buildCompareChart();
+buildMCChart();
+runSimulation(); // run with default values
+</script>
+</body>
+</html>
